@@ -1,0 +1,1 @@
+{"kind":"FETCH","data":{"headers":{"content-length":"72","content-type":"application/json","date":"Fri, 20 Feb 2026 08:02:02 GMT","server":"uvicorn"},"body":"eyJ0b3RhbCI6MCwicGVuZGluZyI6MCwiY29tcGxldGVkIjowLCJyZXZpZXdfcmVxdWlyZWQiOjAsInByb2Nlc3NpbmciOjB9","status":200,"url":"http://localhost:8000/api/jewelry/stats"},"revalidate":31536000,"tags":[]}
