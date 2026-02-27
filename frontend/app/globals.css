@@ -3,40 +3,42 @@
 @tailwind utilities;
 
 :root {
-  --bg: #0F172A;
+  --bg: #09090b;
   --gold: #D4AF37;
-  --slate: #64748B;
   --text: #F1F5F9;
-  --muted: #94A3B8;
 }
 
 body {
-  background: var(--bg);
+  background-color: var(--bg);
+  background-image: 
+    radial-gradient(ellipse at top left, rgba(212, 175, 55, 0.05) 0%, transparent 40%),
+    radial-gradient(ellipse at bottom right, rgba(29, 78, 216, 0.05) 0%, transparent 40%);
   color: var(--text);
   min-height: 100vh;
+  background-attachment: fixed;
 }
 
-/* Luxury scrollbar */
+/* Custom premium scrollbar */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
-
 ::-webkit-scrollbar-track {
-  background: #1E293B;
+  background: transparent;
 }
-
 ::-webkit-scrollbar-thumb {
-  background: #475569;
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(212, 175, 55, 0.4);
 }
 
-::-webkit-scrollbar-thumb:hover {
-  background: #D4AF37;
+.style-scrollbar::-webkit-scrollbar {
+  width: 4px;
 }
 
 /* Subtle gold glow on focus */
 input:focus, select:focus, textarea:focus, button:focus-visible {
   outline: none;
-  box-shadow: 0 0 0 2px rgba(212, 175, 55, 0.4);
 }

@@ -1,13 +1,17 @@
 """Jewelry upload, list, get, update endpoints."""
 
 import uuid
-from datetime import datetime
+from datetime import datetime, timedelta
+import hashlib
 from pathlib import Path
 
 import aiofiles
+import asyncio
 from bson import ObjectId
 from fastapi import APIRouter, File, HTTPException, Request, UploadFile, BackgroundTasks
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, StreamingResponse
+import io
+from openpyxl import Workbook
 
 from app.config import settings
 from app.db import get_db
@@ -50,6 +54,7 @@ async def _save_record(record: JewelryRecord) -> str:
     doc["extracted_data"] = record.extracted_data.model_dump()
     doc["created_at"] = record.created_at
     doc["updated_at"] = record.updated_at
+    doc["file_hash"] = record.file_hash
     doc["_id"] = ObjectId()
     if "id" in doc:
         del doc["id"]
@@ -81,15 +86,14 @@ def _minimal_review_record(image_url: str, image_filename: str) -> JewelryRecord
         review_required=True,
     )
 
-
 @router.post("/upload", response_class=JSONResponse)
 async def upload_spec_sheet(
     file: UploadFile = File(...),
     background_tasks: BackgroundTasks = None,
 ):
     """
-    Upload image. Save to /uploads, run AI then OCR fallback.
-    Never returns 5xx/4xx to frontend - always 201 with a record (Review Required on any failure).
+    Upload image. Save to /uploads and create a Processing record immediately. 
+    Enqueue background task for AI/OCR extraction. Returns 202 Accepted.
     """
     print(f"Upload endpoint called: filename={file.filename}, content_type={file.content_type}")
 
@@ -120,60 +124,106 @@ async def upload_spec_sheet(
     try:
         content = await file.read()
         print(f"Read {len(content)} bytes from uploaded file")
+        
+        file_hash = hashlib.sha256(content).hexdigest()
+        db = await get_db()
+        coll = db["jewelry"]
+        existing = await coll.find_one({"file_hash": file_hash})
+        if existing:
+            print(f"Duplicate file detected: {file.filename} -> {existing.get('_id')}")
+            return JSONResponse(
+                content={"detail": "Duplicate file detected"}, 
+                status_code=409
+            )
+            
         async with aiofiles.open(filepath, "wb") as f:
             await f.write(content)
-        print(f"Saved file to {filepath}")
     except Exception as e:
         print(f"ERROR: Failed to save file: {e}")
         import traceback
         traceback.print_exc()
 
-    if not filepath.exists():
-        print(f"WARNING: File {filepath} does not exist after save attempt")
-        record = _minimal_review_record(image_url, filename)
-    else:
-        try:
-            print(f"Processing image: {filepath}")
-            record = process_upload(filepath, image_url=image_url, image_filename=filename)
-            print(f"Processing complete: status={record.status}, source={record.source}")
-        except Exception as e:
-            print(f"ERROR: Processing failed: {e}")
-            import traceback
-            traceback.print_exc()
-            record = _minimal_review_record(image_url, filename)
-
+    # Create initial "Processing" record
+    record = JewelryRecord(
+        image_url=image_url,
+        image_filename=filename,
+        status=ProcessingStatus.PROCESSING,
+        source=ExtractionSource.AI,
+        confidence_score=1.0,
+        file_hash=file_hash
+    )
+    
     try:
         record_id = await _save_record(record)
-        print(f"Saved record to DB: {record_id}")
+        print(f"Saved initial processing record to DB: {record_id}")
     except Exception as e:
         print(f"WARNING: Failed to save to DB: {e}")
         import traceback
         traceback.print_exc()
         record_id = str(uuid.uuid4())
 
+    def background_process(filepath: Path, record_id: str, image_url: str, filename: str, file_hash: str):
+        # Run synchronous processing
+        try:
+            print(f"Background processing image: {filepath}")
+            processed_record = process_upload(filepath, image_url=image_url, image_filename=filename)
+            processed_record.file_hash = file_hash
+            print(f"Background processing complete: status={processed_record.status}, source={processed_record.source}")
+        except Exception as e:
+            print(f"ERROR: Background processing failed: {e}")
+            import traceback
+            traceback.print_exc()
+            processed_record = _minimal_review_record(image_url, filename)
+            processed_record.file_hash = file_hash
+            
+        # Update the DB record symmetrically to how the FastAPI loop runs it
+        # Since this is synchronous context, we need an event loop
+        async def update_db():
+            dict_data = {
+                "extracted_data": processed_record.extracted_data.model_dump(),
+                "status": processed_record.status.value,
+                "source": processed_record.source.value,
+                "confidence_score": processed_record.confidence_score,
+                "review_required": processed_record.review_required,
+                "raw_text": processed_record.raw_text,
+                "updated_at": datetime.utcnow()
+            }
+            await _update_record(record_id, dict_data)
+            
+        try:
+            # We are in a worker thread. Run the async update.
+            asyncio.run(update_db())
+            print(f"Successfully updated record {record_id} via background task")
+        except RuntimeError: # Loop already running
+            pass
+            
+            
+    if background_tasks:
+        background_tasks.add_task(background_process, filepath, record_id, image_url, filename, file_hash)
+
     try:
         out = _record_to_dict(record)
         out["id"] = record_id
-        print(f"Returning record: id={out['id']}, status={out['status']}")
-        return JSONResponse(content=out, status_code=201)
+        print(f"Returning processing record: id={out['id']}, status={out['status']}")
+        return JSONResponse(content=out, status_code=202)
     except Exception as e:
         print(f"ERROR: Failed to serialize response: {e}")
         import traceback
         traceback.print_exc()
         # Fallback response
         fallback = {
-            "id": str(uuid.uuid4()),
+            "id": record_id,
             "image_url": image_url,
             "image_filename": filename,
             "extracted_data": {},
-            "status": "Review Required",
-            "source": "OCR",
-            "confidence_score": 0.5,
-            "review_required": True,
+            "status": "Processing",
+            "source": "AI",
+            "confidence_score": 1.0,
+            "review_required": False,
             "created_at": None,
             "updated_at": None,
         }
-        return JSONResponse(content=fallback, status_code=201)
+        return JSONResponse(content=fallback, status_code=202)
 
 
 @router.get("")
@@ -235,6 +285,80 @@ async def confidence_trend(limit: int = 10):
             "source": doc.get("source", "AI"),
         })
     return {"points": points}
+
+
+@router.get("/export")
+async def export_jewelry(date: str | None = None):
+    """Export all completed records to a single Excel file."""
+    db = await get_db()
+    coll = db["jewelry"]
+    query = {}
+    
+    if date:
+        try:
+            start_date = datetime.strptime(date, "%Y-%m-%d")
+            end_date = start_date + timedelta(days=1)
+            query["created_at"] = {"$gte": start_date, "$lt": end_date}
+        except ValueError:
+            pass
+            
+    cursor = coll.find(query).sort("created_at", -1)
+    
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Jewelry Specs"
+    
+    # Define headers
+    headers = [
+        "Product ID", "Status", "Source", "Confidence", "Image Filename", 
+        "Ring Size", "Gold Wt 14k (g)", "Gold Wt 18k (g)", "Gold Wt 22k (g)",
+        "Silver Wt (g)", "Platinum Wt (g)", "Diamond Wt (ct)", "Diamond Count", "Diamond Shape",
+        "Stone Wt (ct)", "Stone Count", "Stone Type", "Dimensions", "Length (mm)", "Width (mm)", "Height (mm)",
+        "Created At", "Updated At"
+    ]
+    ws.append(headers)
+    
+    async for doc in cursor:
+        ext = doc.get("extracted_data") or {}
+        row = [
+            str(doc.get("_id", "")),
+            doc.get("status", ""),
+            doc.get("source", ""),
+            doc.get("confidence_score", ""),
+            doc.get("image_filename", ""),
+            ext.get("ring_size", ""),
+            ext.get("gold_weight_14kt_gm", ""),
+            ext.get("gold_weight_18kt_gm", ""),
+            ext.get("gold_weight_22kt_gm", ""),
+            ext.get("silver_weight_gm", ""),
+            ext.get("platinum_weight_gm", ""),
+            ext.get("diamond_weight_ct", ""),
+            ext.get("diamond_count", ""),
+            ext.get("diamond_shape", ""),
+            ext.get("stone_weight_ct", ""),
+            ext.get("stone_count", ""),
+            ext.get("stone_type", ""),
+            ext.get("dimensions_mm", ""),
+            ext.get("length_mm", ""),
+            ext.get("width_mm", ""),
+            ext.get("height_mm", ""),
+            doc.get("created_at").isoformat() if doc.get("created_at") else "",
+            doc.get("updated_at").isoformat() if doc.get("updated_at") else ""
+        ]
+        ws.append(row)
+        
+    stream = io.BytesIO()
+    wb.save(stream)
+    stream.seek(0)
+    
+    headers_dict = {
+        'Content-Disposition': 'attachment; filename="jewelry_export.xlsx"'
+    }
+    return StreamingResponse(
+        iter([stream.getvalue()]), 
+        headers=headers_dict, 
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+    )
 
 
 @router.get("/{record_id}")

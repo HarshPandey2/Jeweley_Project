@@ -41,7 +41,7 @@ SCHEMA_PROMPT = """
 You are a jewelry specification extractor.
 
 Analyze the image and return a single JSON object with the following keys.
-Use null for missing values.
+Use null for missing values if they are not found.
 
 FIELDS:
 
@@ -70,29 +70,22 @@ FIELDS:
 
 - diamonds (array of objects OR null)
 
-DIAMOND TABLE RULES:
+- metal_weights (array of objects OR null)
+- gem_details (array of objects OR null)
 
-If a GEM REPORTER or diamond breakdown table is visible:
+TABLE RULES:
 
-1. You MUST extract every row separately.
-2. You MUST include the "diamonds" array.
-3. Each row must contain:
+1. If a "METAL WEIGHTS" table is visible (e.g. showing "Metal", "Grams", "DWT", etc.):
+   - You MUST extract every row separately into the `metal_weights` array.
+   - Each object should have keys matching the column headers, converted to lowercase with underscores (e.g. `{"metal": "Yellow Gold:14KY", "grams": 1.20, "dwt": 0.77, "spg": 12.8}`).
 
-   {
-     "shape": string,
-     "size": string,
-     "count": integer,
-     "carat": number
-   }
+2. If a "GEM REPORTER" or other detailed gem/diamond table is visible:
+   - You MUST extract every row separately into the `gem_details` array.
+   - Each object should capture all columns (e.g. `{"gem": "Diamond", "shape": "Round", "size": "7.00 x 7.00", "count": 2, "weight": "2.57tw"}`).
 
-4. DO NOT merge rows.
-5. DO NOT summarize rows.
-6. Preserve each row exactly as shown.
+3. For the old "diamonds" array, use the old rules if appropriate, but prefer `gem_details` for full table capture.
 
-7. diamond_count MUST equal the sum of all row counts.
-8. diamond_weight_ct MUST equal the sum of all row carat values.
-
-If no table is visible, return diamonds as null.
+4. DO NOT merge rows. Preserve each row exactly as shown.
 
 Return ONLY valid JSON.
 No markdown.

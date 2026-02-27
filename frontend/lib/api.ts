@@ -17,6 +17,8 @@ export interface JewelryData {
   length_mm?: number | null;
   width_mm?: number | null;
   height_mm?: number | null;
+  metal_weights?: Record<string, any>[] | null;
+  gem_details?: Record<string, any>[] | null;
 }
 
 export interface JewelryRecord {
@@ -93,7 +95,7 @@ export async function fetchJewelry(id: string): Promise<JewelryRecord | null> {
   }
 }
 
-export async function uploadJewelry(file: File, onProgress?: (p: number) => void): Promise<JewelryRecord | null> {
+export async function uploadJewelry(file: File, onProgress?: (p: number) => void): Promise<{ record?: JewelryRecord; duplicate?: boolean; error?: boolean }> {
   const form = new FormData();
   form.append("file", file, file.name || "image.jpg");
 
@@ -109,26 +111,31 @@ export async function uploadJewelry(file: File, onProgress?: (p: number) => void
     });
     if (onProgress) onProgress(90);
 
+    if (res.status === 409) {
+      if (onProgress) onProgress(100);
+      return { duplicate: true };
+    }
+
     const text = await res.text();
     let data: JewelryRecord | null = null;
-    
+
     try {
       data = text ? (JSON.parse(text) as JewelryRecord) : null;
     } catch (parseErr) {
       console.error("Failed to parse upload response:", parseErr, "Response:", text.substring(0, 200));
-      return null;
+      return { error: true };
     }
 
     if (!res.ok || !data) {
       console.warn("Upload failed:", res.status, data || text.substring(0, 200));
-      return null;
+      return { error: true };
     }
-    
+
     if (onProgress) onProgress(100);
-    return data;
+    return { record: data };
   } catch (err) {
     console.error("Upload error:", err);
-    return null;
+    return { error: true };
   }
 }
 

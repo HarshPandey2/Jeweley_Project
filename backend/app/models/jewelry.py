@@ -38,6 +38,8 @@ class JewelryData(BaseModel):
     length_mm: Optional[float] = None
     width_mm: Optional[float] = None
     height_mm: Optional[float] = None
+    metal_weights: Optional[list[dict]] = None  # dynamic metal rows
+    gem_details: Optional[list[dict]] = None  # dynamic gem rows
 
     class Config:
         json_schema_extra = {
@@ -72,6 +74,7 @@ class JewelryRecord(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow)
     updated_at: datetime = Field(default_factory=datetime.utcnow)
     raw_text: Optional[str] = None  # OCR raw text when fallback used
+    file_hash: Optional[str] = None  # SHA256 hash for duplicate check
 
     class Config:
         populate_by_name = True

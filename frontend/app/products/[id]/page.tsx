@@ -4,7 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import Image from "next/image";
 import Link from "next/link";
-import { ArrowLeft, Save, Sparkles, FileSearch } from "lucide-react";
+import { ArrowLeft, Save, Sparkles, FileSearch, Download } from "lucide-react";
+import * as XLSX from "xlsx";
 import { fetchJewelry, updateJewelry, type JewelryRecord, type JewelryData } from "@/lib/api";
 
 const FIELDS: { key: keyof JewelryData; label: string; type?: string }[] = [
@@ -93,6 +94,31 @@ export default function ProductDetailPage() {
     }
   };
 
+  const handleDownloadExcel = () => {
+    // 1. Core Fields
+    const coreData = FIELDS.map((f) => ({
+      Field: f.label,
+      Value: toInputValue((form as Record<string, unknown>)[f.key])
+    }));
+    const wb = XLSX.utils.book_new();
+    const wsCore = XLSX.utils.json_to_sheet(coreData);
+    XLSX.utils.book_append_sheet(wb, wsCore, "Extracted Details");
+
+    // 2. Metal Weights
+    if (form.metal_weights && form.metal_weights.length > 0) {
+      const wsMetals = XLSX.utils.json_to_sheet(form.metal_weights);
+      XLSX.utils.book_append_sheet(wb, wsMetals, "Metal Weights");
+    }
+
+    // 3. Gem Details
+    if (form.gem_details && form.gem_details.length > 0) {
+      const wsGems = XLSX.utils.json_to_sheet(form.gem_details);
+      XLSX.utils.book_append_sheet(wb, wsGems, "Gem Details");
+    }
+
+    XLSX.writeFile(wb, `Jewelry_Spec_${id.slice(-6)}.xlsx`);
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-24">
@@ -124,30 +150,38 @@ export default function ProductDetailPage() {
         </Link>
         <div className="flex items-center gap-3">
           <span
-            className={`inline-flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium ${
-              record.status === "Completed"
-                ? "bg-emerald-500/20 text-emerald-400"
-                : "bg-amber-500/20 text-amber-400"
-            }`}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold tracking-wide ${record.status === "Completed"
+              ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 shadow-[0_0_10px_rgba(16,185,129,0.1)]"
+              : "bg-amber-500/10 text-amber-400 border border-amber-500/20 shadow-[0_0_10px_rgba(245,158,11,0.1)]"
+              }`}
           >
-            {record.source === "AI" ? <Sparkles className="h-3.5 w-3.5" /> : <FileSearch className="h-3.5 w-3.5" />}
-            {record.status} - {record.source}
+            {record.source === "AI" ? <Sparkles className="h-4 w-4" /> : <FileSearch className="h-4 w-4" />}
+            {record.status} • {record.source}
           </span>
+          <button
+            onClick={handleDownloadExcel}
+            className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/5 backdrop-blur-md px-4 py-2.5 text-sm font-medium text-white transition-all hover:bg-white/10 hover:shadow-lg hover:-translate-y-0.5"
+          >
+            <Download className="h-4 w-4" />
+            Export Excel
+          </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="inline-flex items-center gap-2 rounded-lg bg-luxury-gold px-4 py-2 text-sm font-medium text-luxury-dark hover:bg-luxury-gold-light disabled:opacity-50"
+            className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-luxury-gold to-luxury-gold-dark px-5 py-2.5 text-sm font-bold text-luxury-dark shadow-[0_4px_14px_0_rgba(212,175,55,0.39)] transition-all hover:shadow-[0_6px_20px_rgba(212,175,55,0.4)] hover:-translate-y-0.5 disabled:opacity-50"
           >
             <Save className="h-4 w-4" />
-            {saving ? "Saving..." : "Save changes"}
+            {saving ? "Saving..." : "Save Changes"}
           </button>
         </div>
       </div>
 
       <div className="grid gap-8 lg:grid-cols-2">
-        <div className="rounded-xl border border-slate-700/50 bg-slate-900/30 overflow-hidden">
-          <div className="border-b border-slate-700/50 px-4 py-3 text-sm font-medium text-slate-400">
-            Original file
+        <div className="rounded-2xl border border-white/10 bg-white/[0.02] shadow-2xl backdrop-blur-3xl overflow-hidden relative group">
+          <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+          <div className="border-b border-white/5 px-6 py-4 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.6)]" />
+            <span className="text-sm font-semibold tracking-wide text-slate-300">Original File Preview</span>
           </div>
           <div className="relative aspect-square bg-slate-800">
             {!record.image_url ? (
@@ -194,23 +228,79 @@ export default function ProductDetailPage() {
           </div>
         </div>
 
-        <div className="rounded-xl border border-slate-700/50 bg-slate-900/30 overflow-hidden">
-          <div className="border-b border-slate-700/50 px-4 py-3 text-sm font-medium text-slate-400">
-            Extracted form (editable)
+        <div className="rounded-2xl border border-white/10 bg-white/[0.02] shadow-2xl backdrop-blur-3xl overflow-hidden relative group">
+          <div className="absolute inset-0 bg-gradient-to-tl from-white/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
+          <div className="border-b border-white/5 px-6 py-4 flex items-center gap-2">
+            <div className="w-2 h-2 rounded-full bg-luxury-gold shadow-[0_0_10px_rgba(212,175,55,0.6)]" />
+            <span className="text-sm font-semibold tracking-wide text-slate-300">Extracted Form Data</span>
           </div>
-          <div className="p-4 space-y-4 max-h-[70vh] overflow-y-auto">
+          <div className="p-6 space-y-5 max-h-[70vh] overflow-y-auto style-scrollbar">
             {FIELDS.map(({ key, label, type }) => (
-              <div key={key}>
-                <label className="block text-xs font-medium text-slate-500 mb-1">{label}</label>
+              <div key={key} className="group/input">
+                <label className="block text-xs font-semibold uppercase tracking-wider text-slate-500 mb-1.5 transition-colors group-hover/input:text-luxury-gold">{label}</label>
                 <input
                   type={type || "text"}
                   value={toInputValue((form as Record<string, unknown>)[key])}
                   onChange={(e) => handleChange(key, e.target.value)}
-                  className="w-full rounded-lg border border-slate-600 bg-slate-800/50 px-3 py-2 text-sm text-white placeholder-slate-500 focus:border-luxury-gold/50"
-                  placeholder="-"
+                  className="w-full rounded-xl border border-white/10 bg-black/20 px-4 py-2.5 text-sm text-white placeholder-slate-600 outline-none transition-all focus:border-luxury-gold/60 focus:bg-black/40 focus:ring-2 focus:ring-luxury-gold/20"
+                  placeholder="—"
                 />
               </div>
             ))}
+
+            {/* Dynamic Tables */}
+            {form.metal_weights && form.metal_weights.length > 0 && (
+              <div className="mt-8 pt-6 border-t border-white/10">
+                <h3 className="text-sm font-bold tracking-wider text-white mb-4">Metal Weights (Extracted)</h3>
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                  <table className="w-full text-sm text-left text-slate-300">
+                    <thead className="text-xs text-slate-400 uppercase tracking-widest bg-black/30 border-b border-white/10">
+                      <tr>
+                        {Object.keys(form.metal_weights[0]).map((key) => (
+                          <th key={key} className="px-4 py-2">{key.replace(/_/g, ' ')}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.metal_weights.map((row, idx) => (
+                        <tr key={idx} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                          {Object.values(row).map((val, vIdx) => (
+                            <td key={vIdx} className="px-4 py-2">{String(val)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {form.gem_details && form.gem_details.length > 0 && (
+              <div className="mt-8 pt-6 border-t border-white/10">
+                <h3 className="text-sm font-bold tracking-wider text-white mb-4">Gem Details (Extracted)</h3>
+                <div className="overflow-hidden rounded-xl border border-white/10 bg-black/20">
+                  <table className="w-full text-sm text-left text-slate-300">
+                    <thead className="text-xs text-slate-400 uppercase tracking-widest bg-black/30 border-b border-white/10">
+                      <tr>
+                        {Object.keys(form.gem_details[0]).map((key) => (
+                          <th key={key} className="px-4 py-2">{key.replace(/_/g, ' ')}</th>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {form.gem_details.map((row, idx) => (
+                        <tr key={idx} className="border-b border-white/5 last:border-0 hover:bg-white/5 transition-colors">
+                          {Object.values(row).map((val, vIdx) => (
+                            <td key={vIdx} className="px-4 py-2">{String(val)}</td>
+                          ))}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
           </div>
         </div>
       </div>
