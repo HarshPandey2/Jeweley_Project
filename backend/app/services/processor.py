@@ -17,7 +17,7 @@ EXCEL_EXTS = {".xlsx", ".xlsm", ".xltx", ".xltm", ".xls"}
 
 
 def _has_extracted_values(data: JewelryData) -> bool:
-    return any(v is not None and v != "" for v in data.model_dump().values())
+    return any(v is not None and v != "" and v != [] and v != {} for v in data.model_dump().values())
 
 
 def _extract_pdf_text(path: Path) -> str:
@@ -72,10 +72,15 @@ def _process_text_document(path: Path, record: JewelryRecord) -> JewelryRecord:
         ai_data = extract_with_gemini(path)
         if ai_data is not None:
             record.extracted_data = ai_data
-            record.status = ProcessingStatus.COMPLETED
             record.source = ExtractionSource.AI
-            record.confidence_score = 0.92
-            record.review_required = False
+            if _has_extracted_values(ai_data):
+                record.status = ProcessingStatus.COMPLETED
+                record.confidence_score = 0.92
+                record.review_required = False
+            else:
+                record.status = ProcessingStatus.REVIEW
+                record.confidence_score = 0.0
+                record.review_required = True
             return record
 
     raw_text = ""
@@ -167,10 +172,16 @@ def process_upload(
         if "diamonds" not in data_dict:
             data_dict["diamonds"] = None
         record.extracted_data = data
-        record.status = ProcessingStatus.COMPLETED
         record.source = ExtractionSource.AI
-        record.confidence_score = 0.95
-        record.review_required = False
+
+        if _has_extracted_values(data):
+            record.status = ProcessingStatus.COMPLETED
+            record.confidence_score = 0.95
+            record.review_required = False
+        else:
+            record.status = ProcessingStatus.REVIEW
+            record.confidence_score = 0.0
+            record.review_required = True
         return record
 
     # Step 2: Safety net - OCR + regex

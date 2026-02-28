@@ -26,6 +26,12 @@ export default function JewelryTable({
     e.preventDefault();
     onSearch?.(search);
   };
+  const getConfidenceBadgeStyle = (score: number) => {
+    const percentage = score * 100;
+    if (percentage >= 90) return "bg-green-100 text-green-700";
+    if (percentage >= 80) return "bg-amber-100 text-amber-700";
+    return "bg-red-100 text-red-700";
+  };
 
   return (
     <div className="space-y-4">
@@ -117,10 +123,10 @@ export default function JewelryTable({
                     <td className="px-6 py-4">
                       <span
                         className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-medium ${row.status === "Completed"
-                            ? "bg-emerald-500/20 text-emerald-400"
-                            : row.status === "Review Required"
-                              ? "bg-amber-500/20 text-amber-400"
-                              : "bg-slate-500/20 text-slate-400"
+                          ? "bg-emerald-500/20 text-emerald-400"
+                          : row.status === "Review Required"
+                            ? "bg-amber-500/20 text-amber-400"
+                            : "bg-slate-500/20 text-slate-400"
                           }`}
                       >
                         {row.status === "Completed" && (
@@ -140,16 +146,12 @@ export default function JewelryTable({
                       )}
                     </td>
                     <td className="px-6 py-4">
-                      <div className="flex items-center gap-3">
-                        <div className="h-1.5 w-20 overflow-hidden rounded-full bg-black/40 border border-white/5 shadow-inner">
-                          <div
-                            className="h-full rounded-full bg-gradient-to-r from-luxury-gold to-luxury-gold-dark shadow-[0_0_8px_rgba(212,175,55,0.6)] transition-all"
-                            style={{
-                              width: `${(row.confidence_score ?? 0) * 100}%`,
-                            }}
-                          />
-                        </div>
-                        <span className="text-xs font-medium text-slate-400">
+                      <div className="flex items-center">
+                        <span
+                          className={`inline-flex items-center justify-center rounded-full px-2.5 py-0.5 text-xs font-semibold ${getConfidenceBadgeStyle(
+                            row.confidence_score ?? 0
+                          )}`}
+                        >
                           {Math.round((row.confidence_score ?? 0) * 100)}%
                         </span>
                       </div>

@@ -1,7 +1,0 @@
-{
-  "/page": "app/page.js",
-  "/products/page": "app/products/page.js",
-  "/upload/page": "app/upload/page.js",
-  "/products/[id]/page": "app/products/[id]/page.js",
-  "/api/upload/route": "app/api/upload/route.js"
-}

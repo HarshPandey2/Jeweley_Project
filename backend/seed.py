@@ -72,6 +72,7 @@ DUMMY_ITEMS = [
         "source": "AI",
         "confidence_score": 0.92,
         "review_required": False,
+        
         "created_at": datetime.utcnow(),
         "updated_at": datetime.utcnow(),
         "raw_text": None,

@@ -1,4 +1,57 @@
+# =========================
+# 🔹 Python / FastAPI
+# =========================
+
+# Virtual environments
+venv/
+backend/venv/
+backend/app/venv/
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# Environment variables
+.env
+backend/.env
+frontend/.env
+
+# Logs
+*.log
+upload-debug.err.log
+upload-debug.out.log
+
+# Local uploads
+uploads/
+backend/uploads/
+
+# =========================
+# 🔹 Node / Next.js
+# =========================
+
 node_modules/
 frontend/node_modules/
-.env
-backend/venv
+
+.next/
+frontend/.next/
+
+dist/
+build/
+
+# =========================
+# 🔹 IDE & OS files
+# =========================
+
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# =========================
+# 🔹 Testing / coverage
+# =========================
+
+.coverage
+htmlcov/
