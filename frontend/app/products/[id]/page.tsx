@@ -57,6 +57,8 @@ export default function ProductDetailPage() {
   const [form, setForm] = useState<JewelryData>({});
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [isImageZoomOpen, setIsImageZoomOpen] = useState(false);
+  const [zoomScale, setZoomScale] = useState(1);
 
   useEffect(() => {
     if (!id) return;
@@ -93,6 +95,27 @@ export default function ProductDetailPage() {
       setForm(updated.extracted_data || {});
     }
   };
+
+  const closeImageZoom = () => {
+    setIsImageZoomOpen(false);
+    setZoomScale(1);
+  };
+
+  const zoomIn = () => setZoomScale((prev) => Math.min(prev + 0.25, 4));
+  const zoomOut = () => setZoomScale((prev) => Math.max(prev - 0.25, 1));
+  const resetZoom = () => setZoomScale(1);
+
+  useEffect(() => {
+    if (!isImageZoomOpen) return;
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeImageZoom();
+      if (event.key === "+" || event.key === "=") zoomIn();
+      if (event.key === "-") zoomOut();
+      if (event.key === "0") resetZoom();
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [isImageZoomOpen]);
 
   const handleDownloadExcel = () => {
     // 1. Core Fields
@@ -187,13 +210,20 @@ export default function ProductDetailPage() {
             {!record.image_url ? (
               <div className="flex h-full items-center justify-center text-slate-500">No file</div>
             ) : fileKind === "image" ? (
-              <Image
-                src={record.image_url}
-                alt="Specification sheet"
-                fill
-                className="object-contain p-4"
-                unoptimized
-              />
+              <button
+                type="button"
+                onClick={() => setIsImageZoomOpen(true)}
+                className="h-full w-full cursor-zoom-in"
+                aria-label="Open zoom preview"
+              >
+                <Image
+                  src={record.image_url}
+                  alt="Specification sheet"
+                  fill
+                  className="object-contain p-4"
+                  unoptimized
+                />
+              </button>
             ) : fileKind === "pdf" ? (
               <iframe
                 src={record.image_url}
@@ -309,6 +339,84 @@ export default function ProductDetailPage() {
         <p className="mt-4 text-sm text-amber-400/90">
           This record may need manual review. Edit the form and save.
         </p>
+      )}
+
+      {isImageZoomOpen && record.image_url && (
+        <div
+          className="fixed inset-0 z-50 bg-black/85 backdrop-blur-sm p-4 sm:p-8"
+          onClick={closeImageZoom}
+          role="dialog"
+          aria-modal="true"
+          aria-label="Image zoom preview"
+        >
+          <div
+            className="relative h-full w-full"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <div className="absolute right-3 top-3 z-10 flex items-center gap-2 rounded-lg border border-white/10 bg-black/50 p-2">
+              <button
+                type="button"
+                onClick={zoomOut}
+                className="rounded bg-white/10 px-2 py-1 text-sm text-white hover:bg-white/20"
+                aria-label="Zoom out"
+              >
+                -
+              </button>
+              <button
+                type="button"
+                onClick={resetZoom}
+                className="rounded bg-white/10 px-2 py-1 text-xs text-white hover:bg-white/20"
+                aria-label="Reset zoom"
+              >
+                {Math.round(zoomScale * 100)}%
+              </button>
+              <button
+                type="button"
+                onClick={zoomIn}
+                className="rounded bg-white/10 px-2 py-1 text-sm text-white hover:bg-white/20"
+                aria-label="Zoom in"
+              >
+                +
+              </button>
+              <button
+                type="button"
+                onClick={closeImageZoom}
+                className="rounded bg-white/10 px-2 py-1 text-xs text-white hover:bg-white/20"
+                aria-label="Close zoom preview"
+              >
+                Close
+              </button>
+            </div>
+
+            <div
+              className="h-full w-full overflow-auto cursor-zoom-in"
+              onWheel={(event) => {
+                if (!event.ctrlKey) return;
+                event.preventDefault();
+                if (event.deltaY < 0) zoomIn();
+                else zoomOut();
+              }}
+            >
+              <div
+                className="relative mx-auto my-12 h-[75vh] w-[75vw] min-h-[320px] min-w-[320px]"
+                onClick={() => setZoomScale((prev) => (prev >= 4 ? 1 : Math.min(prev + 0.25, 4)))}
+                style={{
+                  transform: `scale(${zoomScale})`,
+                  transformOrigin: "center center",
+                  transition: "transform 150ms ease",
+                }}
+              >
+                <Image
+                  src={record.image_url}
+                  alt="Zoomed specification sheet"
+                  fill
+                  className="object-contain"
+                  unoptimized
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );

@@ -29,6 +29,33 @@ interface UploadResult {
   duplicate?: boolean;
 }
 
+const UPLOAD_BATCH_STORAGE_KEY = "jewelry_upload_batch_v1";
+
+interface UploadBatchState {
+  total: number;
+  ids: string[];
+  preProcessed: number;
+  startedAt: string;
+}
+
+function readBatchState(): UploadBatchState | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(UPLOAD_BATCH_STORAGE_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as UploadBatchState;
+    if (!parsed || typeof parsed.total !== "number" || !Array.isArray(parsed.ids)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writeBatchState(state: UploadBatchState): void {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(UPLOAD_BATCH_STORAGE_KEY, JSON.stringify(state));
+}
+
 export default function UploadZone() {
   const [drag, setDrag] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -41,6 +68,12 @@ export default function UploadZone() {
 
     const newResults: UploadResult[] = files.map(file => ({ file }));
     setResults([...newResults]);
+    writeBatchState({
+      total: files.length,
+      ids: [],
+      preProcessed: 0,
+      startedAt: new Date().toISOString(),
+    });
 
     let completed = 0;
     const CONCURRENCY = 5;
@@ -50,13 +83,24 @@ export default function UploadZone() {
         const res = await uploadJewelry(file);
         if (res?.record) {
           newResults[index].record = res.record;
+          const current = readBatchState();
+          if (current) {
+            const nextIds = current.ids.includes(res.record.id) ? current.ids : [...current.ids, res.record.id];
+            writeBatchState({ ...current, ids: nextIds });
+          }
         } else if (res?.duplicate) {
           newResults[index].duplicate = true;
+          const current = readBatchState();
+          if (current) writeBatchState({ ...current, preProcessed: current.preProcessed + 1 });
         } else {
           newResults[index].error = true;
+          const current = readBatchState();
+          if (current) writeBatchState({ ...current, preProcessed: current.preProcessed + 1 });
         }
       } catch (err) {
         newResults[index].error = true;
+        const current = readBatchState();
+        if (current) writeBatchState({ ...current, preProcessed: current.preProcessed + 1 });
       }
 
       completed++;
